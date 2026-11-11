@@ -1,0 +1,13 @@
+__pycache__/
+build/
+build_onefile/
+dist/
+dist_onefile/
+*.log
+assets/models/*.glb
+*.blend1
+reference/
+docs/_*.png
+
+shots_seasons/
+ref_sedan_evo.jpg

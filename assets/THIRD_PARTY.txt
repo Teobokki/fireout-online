@@ -1,0 +1,12 @@
+FIREOUT SHINE - third-party assets
+
+Japanese font (assets/jp_font.otf): a subset of Noto Sans JP / Noto Sans CJK JP, Copyright 2014-2021 Adobe
+(http://www.adobe.com/), with Reserved Font Name 'Source'. Licensed under the SIL Open Font License, Version 1.1
+(https://openfontlicense.org).
+
+Taxi driver voice (assets/voice/taxi_en_*.wav): pre-rendered offline with Piper TTS (https://github.com/rhasspy/piper)
+using the en_GB "northern_english_male" (medium) voice, trained on the OpenSLR 83 dataset
+(http://www.openslr.org/83/), CC BY-SA 4.0 International. The rendered clips are shared under the same licence.
+
+Japanese NPC voices: synthesised offline with Open JTalk via pyopenjtalk (Modified BSD licence) using the HTS voice
+"Mei" released by the MMDAgent Project Team (http://www.mmdagent.jp/), Creative Commons Attribution 3.0.

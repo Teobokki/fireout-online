@@ -1,0 +1,197 @@
+{
+  "spring": {
+    "title": "SPRING SAKURA",
+    "events": [
+      {
+        "id": "sp_race",
+        "kind": "race",
+        "title": "PETAL SPRINT",
+        "line": "Reach the beach road in under 75 s",
+        "x": 520,
+        "y": -80,
+        "start": [
+          436,
+          -300
+        ],
+        "tlimit": 75,
+        "reward": {
+          "yen": 12000
+        }
+      },
+      {
+        "id": "sp_photo",
+        "kind": "photo",
+        "title": "HANAMI PHOTO",
+        "line": "Take a phone photo at the Shinko Tower plaza",
+        "x": 0,
+        "y": 0,
+        "tower": true,
+        "reward": {
+          "paint": "SAKURA PEARL",
+          "col": [
+            0.98,
+            0.62,
+            0.74
+          ]
+        }
+      },
+      {
+        "id": "sp_drive",
+        "kind": "drive",
+        "title": "SAKURA DRIVE",
+        "line": "Drive to Hanami Park under the cherry blossoms",
+        "x": 300,
+        "y": -220,
+        "reward": {
+          "yen": 6000
+        }
+      }
+    ]
+  },
+  "summer": {
+    "title": "SUMMER NIGHT RACES",
+    "events": [
+      {
+        "id": "su_race",
+        "kind": "race",
+        "title": "SUMMER NIGHT RACE",
+        "line": "Downtown to Hikari Beach in under 90 s",
+        "x": 540,
+        "y": -60,
+        "start": [
+          40,
+          -40
+        ],
+        "tlimit": 90,
+        "reward": {
+          "yen": 15000
+        }
+      },
+      {
+        "id": "su_photo",
+        "kind": "photo",
+        "title": "FIREWORKS PHOTO",
+        "line": "Snap a photo at Hikari Beach",
+        "x": 560,
+        "y": -40,
+        "reward": {
+          "paint": "MATSURI BLUE",
+          "col": [
+            0.05,
+            0.3,
+            0.85
+          ]
+        }
+      },
+      {
+        "id": "su_drive",
+        "kind": "drive",
+        "title": "LANTERN STREET",
+        "line": "Drive to the scramble crossing under the lanterns",
+        "x": 20,
+        "y": 30,
+        "reward": {
+          "yen": 8000
+        }
+      }
+    ]
+  },
+  "autumn": {
+    "title": "AUTUMN DRIFTS",
+    "events": [
+      {
+        "id": "au_race",
+        "kind": "race",
+        "title": "AUTUMN MOMIJI DRIFT",
+        "line": "Hospital to the tower in under 70 s",
+        "x": 0,
+        "y": 0,
+        "tower": true,
+        "start": [
+          -150,
+          100
+        ],
+        "tlimit": 70,
+        "reward": {
+          "yen": 14000
+        }
+      },
+      {
+        "id": "au_photo",
+        "kind": "photo",
+        "title": "MOMIJI PHOTO",
+        "line": "Take a photo in the Sakura district under the leaves",
+        "x": 360,
+        "y": -250,
+        "reward": {
+          "paint": "MOMIJI RED",
+          "col": [
+            0.72,
+            0.1,
+            0.04
+          ]
+        }
+      },
+      {
+        "id": "au_drive",
+        "kind": "drive",
+        "title": "MOMIJI DRIVE",
+        "line": "Drive up to the stadium boulevard",
+        "x": 503,
+        "y": 232,
+        "reward": {
+          "yen": 6000
+        }
+      }
+    ]
+  },
+  "winter": {
+    "title": "WINTER RUN",
+    "events": [
+      {
+        "id": "wi_race",
+        "kind": "race",
+        "title": "WINTER SNOW RUN",
+        "line": "Home to the stadium in under 95 s",
+        "x": 503,
+        "y": 232,
+        "start": [
+          436,
+          -300
+        ],
+        "tlimit": 95,
+        "reward": {
+          "yen": 16000
+        }
+      },
+      {
+        "id": "wi_photo",
+        "kind": "photo",
+        "title": "ILLUMINATION PHOTO",
+        "line": "Take a photo at the Shinko Tower",
+        "x": 0,
+        "y": 0,
+        "tower": true,
+        "reward": {
+          "paint": "FROST WHITE",
+          "col": [
+            0.92,
+            0.94,
+            0.98
+          ]
+        }
+      },
+      {
+        "id": "wi_drive",
+        "kind": "drive",
+        "title": "HOT SPRING TRIP",
+        "line": "Drive to the hospital hill road",
+        "x": -150,
+        "y": 100,
+        "reward": {
+          "yen": 7000
+        }
+      }
+    ]
+  }
+}
