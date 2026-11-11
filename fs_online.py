@@ -1,7 +1,7 @@
 """v1.0.5 FIREOUT ONLINE app (phone, IX LAPTOPOS G9 laptop, pause menu).
 
-Host / join a session with a SHINE-XXXX-XXXX code, play together across the internet (see fs_net), chat, kick, ping,
-friends as NEW characters (8 presets + customiser), BRING THEM IN AI friends, and the SHINE SFC 27 football button."""
+Host / join a session with a KAGE-XXXX-XXXX code, play together across the internet (see fs_net), chat, kick, ping,
+friends as NEW characters (8 presets + customiser), BRING THEM IN AI friends, and the SFC 27 football button."""
 import math, random, time, os
 from direct.gui.DirectGui import DirectFrame, DirectEntry, DGG
 from panda3d.core import TextNode
@@ -175,7 +175,7 @@ class Online:
     def join(self, code, password="", addr=None):
         import fs_net as N
         if N.parse_code(code) is None:
-            self.g.toast("That code looks wrong - it should look like SHINE-XXXX-XXXX", 3.0); return False
+            self.g.toast("That code looks wrong - it should look like KAGE-XXXX-XXXX", 3.0); return False
         self.leave(quiet=True)
         self.sess = N.Session("join", self.profile["name"], self.profile, password=password)
         self.sess.join(code, addr); self._handlers(); self.refresh(); return True
@@ -451,7 +451,7 @@ class Online:
         yb = -0.5
         if self.ai_friends: self._btn(o, "SEND AI FRIENDS HOME", (-0.36, yb), self.send_home, edge=(1, 0.6, 0.3, 1))
         else: self._btn(o, "BRING THEM IN (AI FRIENDS)", (-0.36, yb), self.bring_them_in, edge=(1, 0.6, 0.3, 1))
-        self._btn(o, "SHINE SFC 27 FOOTBALL", (0.36, yb), lambda: self.goto("football"), edge=(0.3, 1.0, 0.45, 1))
+        self._btn(o, "SFC 27 FOOTBALL", (0.36, yb), lambda: self.goto("football"), edge=(0.3, 1.0, 0.45, 1))
         if s is not None: self._btn(o, "LEAVE SESSION" if s.role == "join" else "CLOSE SESSION", (-0.36, -0.62), self.leave, edge=(1, 0.3, 0.3, 1))
         self._btn(o, "CLOSE", (0.36 if s is not None else 0, -0.62), self.close, hint="Esc")
 
@@ -503,7 +503,7 @@ class Online:
         pw = DirectEntry(parent=o, initialText="", width=14, numLines=1, scale=0.045, pos=(-0.32, 0, 0.3), frameColor=(0.1, 0.08, 0.15, 1),
                          text_fg=(1, 1, 1, 1), entryFont=U.FONT_PLAIN, obscured=1); o.ent = pw
         U.text(o, "We ask public STUN servers for your internet address, ask your router (UPnP) to open UDP 47115, and pack\n"
-                  "both into a SHINE-XXXX-XXXX code. Same Wi-Fi friends also see you under LAN SESSIONS.", (0, 0.12), 0.026,
+                  "both into a KAGE-XXXX-XXXX code. Same Wi-Fi friends also see you under LAN SESSIONS.", (0, 0.12), 0.026,
                fg=(0.8, 0.85, 1, 1), font=U.FONT_PLAIN)
         self._btn(o, "START HOSTING", (0, -0.1), lambda: (self.host(pw.get().strip()), self.goto("main")), edge=CY_)
         self._btn(o, "BACK", (0, -0.62), lambda: self.goto("main"))
@@ -512,7 +512,7 @@ class Online:
         import fs_net as N
         self._hdr(o, "JOIN: type the code your friend sent you")
         U.text(o, "Code:", (-0.62, 0.42), 0.036, align=TextNode.A_left, font=U.FONT_PLAIN)
-        ce = DirectEntry(parent=o, initialText="SHINE-", width=17, numLines=1, scale=0.05, pos=(-0.45, 0, 0.42), frameColor=(0.1, 0.08, 0.15, 1),
+        ce = DirectEntry(parent=o, initialText="KAGE-", width=17, numLines=1, scale=0.05, pos=(-0.45, 0, 0.42), frameColor=(0.1, 0.08, 0.15, 1),
                          text_fg=(1, 1, 1, 1), entryFont=U.FONT_PLAIN, focus=1); o.ent = ce
         U.text(o, "Password:", (-0.62, 0.3), 0.032, align=TextNode.A_left, font=U.FONT_PLAIN)
         pe = DirectEntry(parent=o, initialText="", width=14, numLines=1, scale=0.04, pos=(-0.4, 0, 0.3), frameColor=(0.1, 0.08, 0.15, 1),
@@ -534,7 +534,7 @@ class Online:
 
     def view_letin(self, o):
         self._hdr(o, "LET A FRIEND IN: type the REPLY CODE on your friend's screen - your game calls them, so it gets through")
-        ce = DirectEntry(parent=o, initialText="SHINE-", width=17, numLines=1, scale=0.05, pos=(-0.45, 0, 0.3), frameColor=(0.1, 0.08, 0.15, 1),
+        ce = DirectEntry(parent=o, initialText="KAGE-", width=17, numLines=1, scale=0.05, pos=(-0.45, 0, 0.3), frameColor=(0.1, 0.08, 0.15, 1),
                          text_fg=(1, 1, 1, 1), entryFont=U.FONT_PLAIN, focus=1); o.ent = ce
         def go():
             if self.sess and self.sess.let_in(ce.get().strip()): self.g.toast("Calling your friend for 90 s...", 3.0); self.goto("main")
@@ -593,7 +593,7 @@ class Online:
     # football menu ---------------------------------------------------------------
     def view_football(self, o):
         import fs_sfc as F
-        self._hdr(o, "SHINE SFC 27  -  7-a-side on a full-size pitch at the SHINE SFC 27 STADIUM, Hikari Beach")
+        self._hdr(o, "SFC 27  -  7-a-side on a full-size pitch at the SFC 27 STADIUM, Hikari Beach")
         st = getattr(self, "fb", None) or {"home": 0, "away": 1, "min": 0.0}; self.fb = st
         def cyc(key, d):
             st[key] = (st[key] + d) % len(F.CLUBS)

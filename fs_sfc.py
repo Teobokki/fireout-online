@@ -1,6 +1,6 @@
-"""v1.0.5 SHINE SFC 27 - football.
+"""v1.0.5 SFC 27 - football.
 
-  * the SHINE SFC 27 STADIUM on the beach (Hikari Beach, east of the boardwalk): a full-size 105 x 68 m pitch with the
+  * the SFC 27 STADIUM on the beach (Hikari Beach, east of the boardwalk): a full-size 105 x 68 m pitch with the
     standard markings, goals with nets, four stands with a crowd, roofs, plain floodlight masts and a gate with [E] PLAY
   * matches: VS AI (your crew + AI friends + AI fill) or ONLINE with FIREOUT ONLINE session friends (+ AI fill)
   * pass / shoot / tackle / sprint, kickoff, goals, scoreboard, match clock, full time
@@ -18,7 +18,7 @@ GOAL_W, GOAL_H, GOAL_D = 3.66, 2.44, 2.0
 GATE = (506.5, 232.5)            # entrance (west side, faces the boardwalk)
 BALL_R = 0.11
 
-CLUBS = [("SHINE TOKYO FC", "STF", (0.95, 0.35, 0.62), (1.0, 1.0, 1.0)),
+CLUBS = [("KAGEHARA FC", "KFC", (0.95, 0.35, 0.62), (1.0, 1.0, 1.0)),
          ("HIKARI BEACH UNITED", "HBU", (1.0, 0.8, 0.15), (0.1, 0.15, 0.35)),
          ("NEON HARBOUR CITY", "NHC", (0.1, 0.7, 0.75), (0.08, 0.08, 0.1)),
          ("SAKURA HILL ROVERS", "SHR", (0.95, 0.95, 0.95), (0.85, 0.2, 0.35)),
@@ -196,9 +196,9 @@ def add_signs(game):
     """text on the gate (and the big board inside) - real text, no glow"""
     w = game.world; gx, gy, gz = w.stadium_sign
     root = game.app.render.attach_new_node("sfc-signs")
-    for txt, pos, h, sc, col in (("SHINE SFC 27 STADIUM", (gx - 0.03, gy, gz - 0.25), -90, 0.95, (1, 1, 1, 1)),
-                                 ("SHINE SFC 27", (CX, CY + HL + 4.5 + 8.25, 9.2), 0, 2.6, (1, 1, 1, 1)),
-                                 ("SHINE SFC 27", (CX, CY - HL - 4.5 - 8.25, 9.2), 180, 2.6, (1, 1, 1, 1))):
+    for txt, pos, h, sc, col in (("SFC 27 STADIUM", (gx - 0.03, gy, gz - 0.25), -90, 0.95, (1, 1, 1, 1)),
+                                 ("SFC 27", (CX, CY + HL + 4.5 + 8.25, 9.2), 0, 2.6, (1, 1, 1, 1)),
+                                 ("SFC 27", (CX, CY - HL - 4.5 - 8.25, 9.2), 180, 2.6, (1, 1, 1, 1))):
         tn = TextNode("sfc"); tn.set_text(txt); tn.set_align(TextNode.A_center); tn.set_text_color(*col)
         if U.FONT: tn.set_font(U.FONT)
         n = root.attach_new_node(tn); n.set_pos(*pos); n.set_h(h); n.set_scale(sc); n.set_light_off(); n.set_shader_off()
@@ -842,7 +842,7 @@ class Match:
             if n is not None: n.destroy()
         self.root.remove_node(); g.match = None; g.cam_pos = None; g.cam_yaw = 90.0
         self.app.camLens.set_fov(70); g.btn_state = None; g.refresh_buttons()
-        if not again: g.toast("Thanks for playing SHINE SFC 27", 2.5)
+        if not again: g.toast("Thanks for playing SFC 27", 2.5)
 
     # ---------------- online snapshot (host -> clients)
     def snapshot(self):

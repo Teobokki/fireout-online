@@ -83,7 +83,7 @@ class Game:
         except Exception as e:
             self.app.log_error(e); self.events = None
         self.arsenal = Arsenal(self, sd); self.btn_state = None
-        # v1.0.5 FIREOUT ONLINE + SHINE SFC 27
+        # v1.0.5 FIREOUT ONLINE + SFC 27
         self.match = None; self.guest = False; self._save = sd
         import fs_online, fs_sfc
         self.online = fs_online.Online(self); self.online_app = self.online.open
@@ -239,7 +239,7 @@ class Game:
         return h
 
     def start_match(self, **kw):
-        """v1.0.5 SHINE SFC 27: kick off at the stadium (VS AI, or ONLINE when the session has friends)"""
+        """v1.0.5 SFC 27: kick off at the stadium (VS AI, or ONLINE when the session has friends)"""
         import fs_sfc
         if self.match is not None: return
         if self.ride: self.leave_taxi()
@@ -412,7 +412,12 @@ class Game:
             if self.home.get("mode") == "room": self.home_use()
             return
         if self.blocked(): return
-        if getattr(self, "hackeria", None) and self.hackeria.try_hack():
+        if getattr(self, "hackeria", None) and self.hackeria.has_hack_target():
+            # hold-to-hack is driven from Hackeria.update; tapping E only locks the target
+            return
+        if getattr(self, "hackeria", None) and self.hackeria.target is not None:
+            # locked device: still swallow E so we don't trigger a nearby marker
+            self.hackeria.try_hack()
             return
         m = self.near_marker()
         if m: self.start_activity(m["id"]); return
@@ -507,7 +512,7 @@ class Game:
         add("garage", D.GARAGE_POS[0], D.GARAGE_POS[1], "FRGARAGE", (0.2, 1.0, 0.9), "garage")
         add("shop", SHOP_POS[0], SHOP_POS[1], "KAZAN SUPPLY", (1.0, 0.85, 0.2), "shop")
         add("home", D.HOME_POS[0], D.HOME_POS[1], "ELIJER'S LOFT", (0.3, 0.9, 1.0), "home")
-        add("sfc", D.STADIUM_GATE[0], D.STADIUM_GATE[1], "SHINE SFC 27", (0.3, 1.0, 0.45), "football")
+        add("sfc", D.STADIUM_GATE[0], D.STADIUM_GATE[1], "SFC 27", (0.3, 1.0, 0.45), "football")
         self.mk_np = self.app.render.attach_new_node("markers")
         tex = self.world.T("glow.png", repeat=False); beam = self.world.T("beam.png", repeat=False)
         for m in self.markers:
@@ -543,7 +548,7 @@ class Game:
             "hospital": "+", "tower": "A", "beach": "~", "speedcam": "S", "football": "F"}
     LEGEND = [("H", "ELIJER'S LOFT (home)"), ("G", "FRGARAGE (paint & plates)"), ("R", "Street race"), ("T", "Time trial"),
               ("D", "Drift zone"), ("P", D.GET_WANTED + " (police chase)"), ("S", "Speed camera"), ("$", "KAZAN SUPPLY (ammo)"), ("+", "Hospital"),
-              ("A", "Shinko Tower (landmark)"), ("~", "HIKARI BEACH"), ("F", "SHINE SFC 27 STADIUM (football)"), ("*", "Neon token"), ("X", "Waypoint")]
+              ("A", "Shinko Tower (landmark)"), ("~", "HIKARI BEACH"), ("F", "SFC 27 STADIUM (football)"), ("*", "Neon token"), ("X", "Waypoint")]
 
     def build_pois(self):
         """non-interactive places shown on the map + minimap"""
@@ -1571,7 +1576,7 @@ class Game:
             if b:
                 b.x, b.y, b.h = gx - 2.5, gy + 1.2, -90.0; b.sync()
             self.fade(0.6)
-            self.toast("SHINE SFC 27 STADIUM  -  press [E] at the gate to play", 3.5)
+            self.toast("SFC 27 STADIUM  -  press [E] at the gate to play", 3.5)
             c.ai = TrafficAI(self, c, self.world.nearest_node(c.x, c.y)); c.role = "traffic"
             self.cam_yaw = -90.0; self.cam_pos = None; self.app.sfx("door", 0.6); self.refresh_buttons(); return
         c.ai = TrafficAI(self, c, self.world.nearest_node(c.x, c.y)); c.role = "traffic"
@@ -2147,9 +2152,10 @@ class Game:
     def refresh_buttons(self):
         if self.phone is not None and getattr(self.phone, "driving", None) is not None and self.phone.driving != (self.pcar is not None):
             self.phone_screen(self.phone.which); return
+        hack = bool(getattr(self, "hackeria", None) and (self.hackeria.has_hack_target() or self.hackeria.cam_view))
         st = (self.pcar is not None, self.ride is not None and self.ride.get("mode"), self.phone is not None, self.overlay is not None,
               self.garage is not None or self.home is not None or self.camapp is not None, self.active, self.app.settings.get("buttons", True), bool(self.near_marker()) if hasattr(self, "markers") else False,
-              self.miyo.state() if hasattr(self, "miyo") else None, self.miyo_spot() if hasattr(self, "miyo") else None, getattr(self, "match", None) is not None)
+              self.miyo.state() if hasattr(self, "miyo") else None, self.miyo_spot() if hasattr(self, "miyo") else None, getattr(self, "match", None) is not None, hack)
         if st == self.btn_state: return
         self.btn_state = st
         for n in getattr(self, "btn_nodes", []): n.destroy()
@@ -2220,7 +2226,11 @@ class Game:
             ctx = DirectFrame(parent=a.a2dBottomCenter, frameColor=(0, 0, 0, 0), pos=(0, 0, 0.30)); self.btn_nodes.append(ctx)
             U.button(ctx, sp[0], (0, 0), sp[1], hint=sp[2], w=0.3, h=0.05, scale=0.036, edge=sp[3])
         m = self.near_marker()
-        if m:
+        if getattr(self, "hackeria", None) and self.hackeria.has_hack_target():
+            p, r = self.hold("v_hack")
+            U.button(br, "HACK", (col2, rows[3] if self.pcar else rows[1]), None, hint="E", press=p, release=r,
+                     edge=(0.3, 0.95, 1, 1), **bw)
+        elif m:
             U.button(br, {"garage": "GARAGE", "shop": "REFILL", "home": "ENTER HOME"}.get(m["kind"], "START"), (col2, rows[3] if self.pcar else rows[1]), self.key_e, hint="E",
                      edge=U.GOLD, **bw)
         if self.activity:
@@ -2380,7 +2390,7 @@ class Game:
             self.race_t.setText("")
         m = self.near_marker()
         if self.garage or self.overlay or self.phone: self.prompt.setText("")
-        elif m: self.prompt.setText("[E] %s" % ("ENTER FRGARAGE" if m["kind"] == "garage" else "ENTER HOME" if m["kind"] == "home" else ("REFILL AMMO (¥300)" if m["kind"] == "shop" else ("PLAY SHINE SFC 27" if m["kind"] == "football" else "START " + m["name"]))))
+        elif m: self.prompt.setText("[E] %s" % ("ENTER FRGARAGE" if m["kind"] == "garage" else "ENTER HOME" if m["kind"] == "home" else ("REFILL AMMO (¥300)" if m["kind"] == "shop" else ("PLAY SFC 27" if m["kind"] == "football" else "START " + m["name"]))))
         elif self.miyo_spot(): self.prompt.setText("[N] SUMMON TSUNAMI")
         elif getattr(self, "bar", None) is not None and self.bar.near(): self.prompt.setText("[E] ORDER A DRINK  -  HIKARI BEACH BAR")
         elif self.pcar is None and self.ride is None and self.taxi_ai_arrived() and math.hypot(self.taxi.x - me.x, self.taxi.y - me.y) < 8:
@@ -2510,9 +2520,57 @@ class Game:
             self.app.log_error(e)
         return task.cont
 
+    def _apply_blackout_light(self):
+        """Near-total dark: dense black fog, neon almost out. Headlight beams and phone HUD stay visible."""
+        app = self.app
+        try:
+            app.set_daylight(0.0, 0.0)
+        except Exception:
+            pass
+        try:
+            app.fog.set_color(0.002, 0.003, 0.006)
+            app.set_background_color(0, 0, 0, 1)
+            app.fog.set_exp_density(0.048)
+            app.render.set_shader_input("dayk", 0.0)
+        except Exception:
+            pass
+        w = self.world
+        try:
+            if w is not None:
+                if getattr(w, "static", None):
+                    w.static.set_color_scale(0.10, 0.11, 0.12, 1)
+                for np_ in getattr(w, "emit_nodes", []) or []:
+                    np_.set_color_scale(0.04, 0.045, 0.05, 1)
+                if getattr(w, "ground_np", None) is not None:
+                    w.ground_np.set_color_scale(0.12, 0.12, 0.13, 1)
+                if getattr(w, "sky_day", None) is not None:
+                    w.sky_day.hide()
+        except Exception:
+            pass
+        # keep road headlight beams visible
+        for c in self.cars:
+            try:
+                if getattr(c, "beam", None) is not None and not c.beam.is_empty():
+                    c.beam.set_color(0.85, 0.92, 1.0, 0.85)
+                    c.beam.show()
+            except Exception:
+                pass
+
     def update_daynight(self, dt):
         """24 real minutes = 24 h in game. Settings can lock day or night."""
+        if getattr(self, "hackeria", None) and self.hackeria.blackout_t > 0:
+            self._apply_blackout_light()
+            self._blackout_beams = True
+            return
         mode = self.app.settings.get("tod", "cycle")
+        if getattr(self, "_blackout_beams", False):
+            self._blackout_beams = False
+            for c in self.cars:
+                try:
+                    if getattr(c, "beam", None) is not None and not c.beam.is_empty():
+                        c.beam.set_color(0.80, 0.90, 1.0, 0.55)
+                except Exception:
+                    pass
         if mode == "day": self.tod = 13.0
         elif mode == "night": self.tod = 23.0
         else: self.tod = (self.tod + dt / 60.0) % 24.0
@@ -2531,7 +2589,7 @@ class Game:
         self.time += dt
         self.update_daynight(dt)
         self.online.update(dt)
-        if self.match is not None:             # v1.0.5 SHINE SFC 27: the match owns the player, ball and camera
+        if self.match is not None:             # v1.0.5 SFC 27: the match owns the player, ball and camera
             self.match.step(dt); self.world.update(dt, self.time); self.update_hud(dt); self.app.update_audio(self, dt)
             self.prompt.setText("")
             return

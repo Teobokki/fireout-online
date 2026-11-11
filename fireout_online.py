@@ -64,7 +64,7 @@ from direct.gui.DirectGui import DirectFrame, DirectSlider, DirectButton, DGG
 from direct.gui.OnscreenImage import OnscreenImage
 from direct.gui import DirectGuiGlobals
 from panda3d.core import (TextNode, TransparencyAttrib, WindowProperties, PTA_LVecBase3f, Texture, PNMImage, SamplerState,
-                          AudioSound, CardMaker, Fog, Vec3, TextureStage, ColorBlendAttrib, InputDevice)
+                          AudioSound, CardMaker, Fog, Vec3, TextureStage, ColorBlendAttrib, InputDevice, ClockObject)
 import fs_ui as U
 import fs_data as D
 from fs_world import World
@@ -176,13 +176,14 @@ class App(ShowBase):
         self._sfx = {}
         for n in ("engine", "engine_low", "siren", "skid", "wind", "rain", "nitro", "crash", "bump", "checkpoint", "beep", "go", "click",
                   "busted", "win", "heat", "horn", "door", "switch", "dial", "cash",
-                  "pistol", "smg", "shotgun", "taser", "swing", "swing_heavy", "hit", "empty"):
+                  "pistol", "smg", "shotgun", "taser", "swing", "swing_heavy", "hit", "empty",
+                  "rex_whoosh", "hack_chirp", "hack_static"):
             try:
                 self._sfx[n] = self.loader.load_sfx(Filename.from_os_specific(A("sfx", n + ".wav")))
             except Exception:
                 pass
         self.loops = {}
-        for n in ("engine", "engine_low", "siren", "skid", "wind", "rain"):
+        for n in ("engine", "engine_low", "siren", "skid", "wind", "rain", "hack_drone"):
             try:
                 s = self.loader.load_sfx(Filename.from_os_specific(A("sfx", n + ".wav"))); s.set_loop(True); s.set_volume(0); self.loops[n] = s
             except Exception:
@@ -420,7 +421,7 @@ class App(ShowBase):
         self.screen = DirectFrame(parent=self.aspect2d, frameColor=(0, 0, 0, dim), frameSize=(-4, 4, -2, 2))
         return self.screen
 
-    # ---------------------------------------------------------------- boot: splash -> intro flyover -> title
+    # ---------------------------------------------------------------- boot: REX ENGINE -> EX ROMANIA -> title
     def _img(self, parent, name, pos=(0, 0), scale=(1, 1), alpha=True):
         im = OnscreenImage(parent=parent, image=Filename.from_os_specific(os.path.join(BASE, "assets", *name.split("/"))).get_fullpath(),
                            pos=(pos[0], 0, pos[1]), scale=(scale[0], 1, scale[1]))
@@ -428,41 +429,120 @@ class App(ShowBase):
         return im
 
     def show_splash(self):
+        """Skippable boot: REX ENGINE (~2.5 s) -> EX ROMANIA (~2 s) -> title / press play."""
         s = self.new_screen(1.0)
         ar = max(self.getAspectRatio(), 1.0)
-        DirectFrame(parent=s, frameColor=(0, 0, 0, 1), frameSize=(-ar - 1, ar + 1, -1.2, 1.2))
-        im = self._img(s, "tex/ex_romania_logo.jpg", scale=(0.50, 0.50), alpha=False)
-        im.set_color_scale(1, 1, 1, 0); im.set_transparency(TransparencyAttrib.M_alpha)
-        U.text(s, "EX ROMANIA", (0, -0.62), 0.055, fg=(1, 1, 1, 1), font=U.FONT_PLAIN)
-        U.text(s, "Developed by EX ROMANIA", (0, -0.70), 0.032, fg=(0.85, 0.85, 0.85, 1), font=U.FONT_PLAIN)
-        U.text(s, "Press a key to skip", (0, -0.90), 0.028, fg=(1, 1, 1, 0.5), font=U.FONT_PLAIN)
-        self._splash = (s, im, 0.0)
-        self.accept("escape", self._end_splash); self.accept("enter", self._end_splash); self.accept("mouse1", self._end_splash)
+        bg = DirectFrame(parent=s, frameColor=(0.18, 0.18, 0.19, 1), frameSize=(-ar - 1, ar + 1, -1.2, 1.2))
+        skip = U.text(s, "Press any key to skip", (0, -0.92), 0.028, fg=(1, 1, 1, 0.45), font=U.FONT_PLAIN)
+        self._boot = {"screen": s, "bg": bg, "im": None, "labels": [], "stage": 0, "st": 0.0,
+                      "skip": False, "whoosh": False, "ar": ar}
+        self._boot_stage(0)
+        self._splash = self._boot  # used as a "boot is running" flag
+        self.accept("escape", self._skip_boot); self.accept("enter", self._skip_boot); self.accept("mouse1", self._skip_boot)
         if self.buttonThrowers:
             self.buttonThrowers[0].node().set_button_down_event("fs-anykey")
-        self.accept("fs-anykey", lambda b: None if str(b).startswith("wheel") else self._end_splash())
-        self.task_mgr.add(self._splash_task, "splash")
+        self.accept("fs-anykey", lambda b: None if str(b).startswith("wheel") else self._skip_boot())
+        self.task_mgr.add(self._boot_task, "splash")
 
-    def _splash_task(self, task):
-        if not getattr(self, "_splash", None): return task.done
-        s, im, _ = self._splash; t = task.time
-        if t > 0.2 and self.world is None:
+    def _boot_clear_logo(self):
+        b = self._boot
+        if b.get("im") is not None and not b["im"].is_empty():
+            b["im"].destroy()
+        b["im"] = None
+        for n in b.get("labels") or []:
+            try: n.destroy()
+            except Exception: pass
+        b["labels"] = []
+
+    def _boot_stage(self, stage):
+        b = self._boot
+        self._boot_clear_logo()
+        b["stage"] = stage
+        b["st"] = 0.0
+        s, ar = b["screen"], b["ar"]
+        if stage == 0:
+            # REX ENGINE: dark wordmark on its grey gradient, unaltered
+            b["bg"]["frameColor"] = (0.18, 0.18, 0.19, 1)
+            im = self._img(s, "tex/rex_engine_logo.jpg", scale=(0.62, 0.62), alpha=False)
+            im.set_transparency(TransparencyAttrib.M_alpha)
+            im.set_color_scale(1, 1, 1, 0)
+            b["im"] = im
+        else:
+            b["bg"]["frameColor"] = (0, 0, 0, 1)
+            im = self._img(s, "tex/ex_romania_logo.jpg", scale=(0.50, 0.50), alpha=False)
+            im.set_transparency(TransparencyAttrib.M_alpha)
+            im.set_color_scale(1, 1, 1, 0)
+            b["im"] = im
+            b["labels"] = [
+                U.text(s, "EX ROMANIA", (0, -0.62), 0.055, fg=(1, 1, 1, 1), font=U.FONT_PLAIN),
+                U.text(s, "Developed by EX ROMANIA", (0, -0.70), 0.032, fg=(0.85, 0.85, 0.85, 1), font=U.FONT_PLAIN),
+            ]
+
+    def _boot_fade(self, t, dur, fade=0.40):
+        if t < fade:
+            return max(0.0, t / fade)
+        if t > dur - fade:
+            return max(0.0, (dur - t) / fade)
+        return 1.0
+
+    def _boot_task(self, task):
+        if not getattr(self, "_boot", None):
+            return task.done
+        b = self._boot
+        try:
+            dt = ClockObject.get_global_clock().get_dt()
+        except Exception:
+            dt = 0.016
+        if self.world is None:
             try:
                 self.world = World(self, int(self.settings.get("quality", 1)))
             except Exception:
                 log_error(traceback.format_exc()); raise
             self.apply_quality()
-        a = min(1.0, t / 0.25)
-        if not im.is_empty(): im.set_color_scale(1, 1, 1, a)
-        if t > 2.0 and self.world is not None:
-            self._end_splash(); return task.done
+            b["st"] = 0.0
+            b["whoosh"] = False
+            self._boot_stage(0)
+            return task.cont
+        dt = min(0.05, max(0.0, dt))
+        b["st"] += dt
+        if b["stage"] == 0 and not b.get("whoosh"):
+            b["whoosh"] = True
+            try: self.sfx("rex_whoosh", 0.85)
+            except Exception: pass
+        dur = 2.5 if b["stage"] == 0 else 2.0
+        a = self._boot_fade(b["st"], dur, 0.40)
+        im = b.get("im")
+        if im is not None and not im.is_empty():
+            im.set_color_scale(1, 1, 1, a)
+        if b.get("skip") and self.world is not None:
+            self._end_boot(); return task.done
+        if b["st"] >= dur:
+            if b["stage"] == 0:
+                self._boot_stage(1)
+            elif self.world is not None:
+                self._end_boot(); return task.done
         return task.cont
 
-    def _end_splash(self):
-        if not getattr(self, "_splash", None) or self.world is None: return
-        self._splash = None; self.task_mgr.remove("splash")
-        for k in ("escape", "enter", "mouse1", "fs-anykey"): self.ignore(k)
+    def _skip_boot(self):
+        if getattr(self, "_boot", None):
+            self._boot["skip"] = True
+            if self.world is not None:
+                self._end_boot()
+
+    def _end_boot(self):
+        if not getattr(self, "_boot", None):
+            return
+        if self.world is None:
+            self._boot["skip"] = True
+            return
+        self._boot = None; self._splash = None
+        self.task_mgr.remove("splash")
+        for k in ("escape", "enter", "mouse1", "fs-anykey"):
+            self.ignore(k)
         self.show_title()
+
+    def _end_splash(self):
+        self._skip_boot()
 
     def show_intro(self):
         s = self.new_screen(0.0); self.flyover = True; self.fly_t = 0.0; self.play_music("music_menu")
@@ -576,7 +656,7 @@ class App(ShowBase):
         self.task_mgr.remove("pp-pulse"); self.ignore("fs-anykey")
         s = self.new_screen(1.0); s["frameColor"] = (0.02, 0.01, 0.05, 1)
         U.text(s, "Entering Kagehara...", (0, 0.05), 0.07, fg=U.CYAN)
-        U.text(s, "Tip: E hacks the city with EX OS HACKERIA, Q opens the skill tree, T opens the phone, F takes any car.", (0, -0.1), 0.036, font=U.FONT_PLAIN)
+        U.text(s, "Tip: Hold E to hack the city with EX OS HACKERIA. Q opens the skill tree, T opens the phone, F takes any car.", (0, -0.1), 0.036, font=U.FONT_PLAIN)
         save = self.load_save()
         self.show_stage(False)
         def go(task):
@@ -774,7 +854,7 @@ class App(ShowBase):
             items = (("RESUME", self.hide_pause), ("LEAVE MATCH" if m.mode == "view" else "END MATCH", end) if not m.done else ("LEAVE STADIUM", lambda: (self.hide_pause(), m.quit())),
                      ("SETTINGS", lambda: self.open_settings(None)), ("CONTROLS", self.show_controls),
                      ("SAVE & QUIT TO TITLE", self.quit_to_title), ("QUIT GAME", self.userExit))
-            U.text(o, "SHINE SFC 27  %d - %d   %s" % (m.score[0], m.score[1], m.clock_text()), (0, 0.545), 0.032, fg=U.CYAN)
+            U.text(o, "SFC 27  %d - %d   %s" % (m.score[0], m.score[1], m.clock_text()), (0, 0.545), 0.032, fg=U.CYAN)
             top = 0.48
         step = 0.078 if m is None else 0.085
         for i, (lab, c) in enumerate(items):
@@ -989,7 +1069,7 @@ class App(ShowBase):
         U.panel(o, -1.0, 1.0, -0.8, 0.8)
         U.text(o, "CONTROLS", (0, 0.68), 0.07, fg=U.PINK)
         rows = [("W / S  or  Arrows", "Accelerate / brake & reverse  (walk on foot)"), ("A / D  or  Arrows", "Steer"),
-                ("Space", "Handbrake (drift)"), ("Shift", "Nitro  /  run on foot"), ("E", "HACK  -  EX OS HACKERIA (highlighted device)"),
+                ("Space", "Handbrake (drift)"), ("Shift", "Nitro  /  run on foot"), ("E", "HOLD E  -  HACK with EX OS HACKERIA (highlighted device)"),
                 ("F", "Enter / exit / take any car, ride a taxi"),
                 ("Q", "EX OS HACKERIA skill tree"), ("B / N", "CITY BLACKOUT (once unlocked)  /  night contracts (N, or next camera)"), ("Tab (hold) / wheel", "Weapon wheel / cycle weapons"),
                 ("Right / Left mouse", "Aim (over-shoulder) / attack"), ("T  or  Up (on foot)", "Phone (EX IX G9)"), ("E", "Start event / enter FRGARAGE"),

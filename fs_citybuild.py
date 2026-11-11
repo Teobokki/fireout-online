@@ -793,7 +793,7 @@ def a_rocket(m, o, rng):
         pass
     for side in (-1,):
         ellipsoid(m, "flat", 0, -R * 0.98, zt - 2.0, 0.6, 0.15, 0.6, (0.2, 0.35, 0.55, 1), 12, 8)
-    sign(m, o["title"] or "SHINE 1", 0, -R - 0.05, H * 0.35, 1.2 + 0.5 * len(o["title"] or "SHINE 1"), 0.9, col=(0.96, 0.96, 0.95, 1), fg=(0.1, 0.1, 0.12, 1))
+    sign(m, o["title"] or "BLOCK 1", 0, -R - 0.05, H * 0.35, 1.2 + 0.5 * len(o["title"] or "BLOCK 1"), 0.9, col=(0.96, 0.96, 0.95, 1), fg=(0.1, 0.1, 0.12, 1))
     box(m, "flat", R + 2.0, -1.0, 1.2, R + 3.0, 1.0, H * 0.8, (0.6, 0.15, 0.1, 1))                  # service tower
     return "a rocket"
 

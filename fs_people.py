@@ -194,43 +194,78 @@ class Person:
 
     def _dress_elijer(self, m, app, sh):
         """Dark jacket, black face mask, flat cap with a cyan circuit pattern. No bloom."""
-        from fs_miyo import box_mesh, shade
+        from fs_miyo import box_mesh, shade, blob_mesh, shrinkwrap_shirt, DAN_HEAD_O
+        dark = (0.08, 0.08, 0.09, 1)
+        # fitted dark jacket over the torso (vertex colour only — no bad UVs)
         if not sh.is_empty():
-            for n in [sh] + list(m.find_all_matches("**/sleeve*")):
-                try:
-                    n.set_texture(tex(app, "jacket_elijer.png"), 1)
-                    fs_shaders.apply(n, app, gloss=0.18, tex=True, sheen=0.25)
-                except Exception:
-                    n.set_shader_input("tint", (0.10, 0.10, 0.11, 1))
+            sh.hide()
+        for n in list(m.find_all_matches("**/sleeve*")):
+            if n.is_empty():
+                continue
+            n.set_texture_off(1)
+            shade(n, app, 0.14, 0.15)
+            n.set_shader_input("tint", dark)
+            n.set_shader_input("use_tex", 0.0)
+            n.set_shader_input("emitboost", 0.0)
+            n.set_scale(1.06, 1.06, 1.0)
+        jacket = None
+        try:
+            jacket = shrinkwrap_shirt(m, dark, z0=0.96, z1=1.46, off=0.016)
+        except Exception:
+            jacket = None
+        if jacket is not None:
+            shade(jacket, app, 0.14, 0.15)
+            jacket.set_shader_input("tint", dark)
+            jacket.set_shader_input("use_tex", 0.0)
+            jacket.set_shader_input("emitboost", 0.0)
+            jacket.set_two_sided(True)
+        elif not sh.is_empty():
+            sh.show()
+            try:
+                sh.set_texture(tex(app, "jacket_elijer.png"), 1)
+                fs_shaders.apply(sh, app, gloss=0.16, tex=True, sheen=0.2)
+            except Exception:
+                sh.set_shader_input("tint", dark)
+        for arm in (m.find("**/armL"), m.find("**/armR")):
+            if arm.is_empty():
+                continue
+            pad = arm.attach_new_node(blob_mesh("elijer_shoulder", [(0, 0, -0.028, 0.07, 0.074, 0.07)], dark, 12, 8))
+            shade(pad, app, 0.14, 0.12)
+            pad.set_shader_input("tint", dark)
+            pad.set_shader_input("use_tex", 0.0)
+            pad.set_shader_input("emitboost", 0.0)
         tr = m.find("**/trousers")
         if not tr.is_empty():
-            try:
-                tr.set_shader_input("tint", (0.08, 0.08, 0.09, 1))
-            except Exception:
-                pass
+            tr.set_shader_input("tint", (0.07, 0.07, 0.08, 1))
         hr = m.find("**/hair")
         if not hr.is_empty():
-            hr.hide()
-        # flat cap + brim + circuit overlay
-        cap_boxes = [
-            (-0.12, -0.13, 1.64, 0.12, 0.11, 1.78, (0.10, 0.10, 0.11, 1)),
-            (-0.18, -0.08, 1.63, 0.18, 0.16, 1.655, (0.10, 0.10, 0.11, 1)),
-        ]
-        cap = m.attach_new_node(box_mesh("elijer_cap", cap_boxes))
-        try:
-            cap.set_texture(tex(app, "cap_circuit.png"), 1)
-            fs_shaders.apply(cap, app, gloss=0.2, tex=True, sheen=0.15)
-        except Exception:
-            shade(cap, app, 0.2)
-        # face mask
-        mask = m.attach_new_node(box_mesh("elijer_mask", [
-            (-0.09, 0.05, 1.40, 0.09, 0.15, 1.58, (0.06, 0.06, 0.06, 1))
-        ]))
-        try:
-            mask.set_texture(tex(app, "mask_elijer.png"), 1)
-            fs_shaders.apply(mask, app, gloss=0.12, tex=True, sheen=0.1)
-        except Exception:
-            shade(mask, app, 0.15)
+            hr.set_scale(0.92, 0.92, 0.82)
+            hr.set_z(-0.02)
+        # gear sits at the head origin; face is -Y in model space
+        gear = m.attach_new_node("elijer_gear")
+        gear.set_pos(*DAN_HEAD_O)
+        def add_boxes(name, boxes, gloss=0.16):
+            n = gear.attach_new_node(box_mesh(name, boxes))
+            shade(n, app, gloss, 0.12)
+            n.set_shader_input("use_tex", 0.0)
+            n.set_shader_input("emitboost", 0.0)
+            return n
+        # flat cap: crown sits on the skull, brim toward the face
+        add_boxes("elijer_cap", [
+            (-0.09, -0.06, -0.005, 0.09, 0.10, 0.068, dark),
+            (-0.10, -0.13, -0.008, 0.10, 0.02, 0.016, dark),
+        ])
+        cy = (0.22, 0.82, 1.0, 1)
+        add_boxes("elijer_circuit", [
+            (-0.008, -0.008, 0.062, 0.008, 0.008, 0.080, cy),
+            (-0.055, -0.007, 0.060, 0.055, 0.007, 0.074, cy),
+            (-0.007, -0.045, 0.060, 0.007, 0.050, 0.074, cy),
+            (-0.035, -0.035, 0.060, -0.012, -0.012, 0.074, cy),
+            (0.012, 0.012, 0.060, 0.035, 0.035, 0.074, cy),
+        ], gloss=0.25)
+        add_boxes("elijer_mask", [
+            (-0.072, -0.068, -0.085, 0.072, -0.040, -0.010, (0.05, 0.05, 0.055, 1)),
+        ], gloss=0.10)
 
     def walk_anim(self, dt, speed):
         if self.knock > 0:

@@ -3,8 +3,8 @@
 How a session is reached
   * the host opens one UDP socket (default port 47115) and asks public STUN servers what address the internet sees
   * it also asks the home router (UPnP IGD) to forward that UDP port - if the router agrees, anyone can join directly
-  * the host's public address + port + a random nonce are packed into a JOIN CODE:  SHINE-XXXX-XXXX (port 47115 kept)
-    or SHINE-XXXX-XXXX-XXXX (any other port)
+  * the host's public address + port + a random nonce are packed into a JOIN CODE:  KAGE-XXXX-XXXX (port 47115 kept)
+    or KAGE-XXXX-XXXX-XXXX (any other port)
   * joiners decode the code and keep sending signed HELLO packets to that address (UDP hole punching); the host answers
   * if the host's router is strict, the joiner shows a REPLY CODE: the host types it under LET A FRIEND IN and punches back
   * if nothing gets through the game says exactly which UDP port the host should forward
@@ -26,19 +26,20 @@ def _b32(n, chars):
 
 
 def make_code(ip, port, nonce):
-    """ip:port + nonce -> SHINE-XXXX-XXXX (port 47115) or SHINE-XXXX-XXXX-XXXX"""
+    """ip:port + nonce -> KAGE-XXXX-XXXX (port 47115) or KAGE-XXXX-XXXX-XXXX"""
     ipn = struct.unpack("!I", socket.inet_aton(ip))[0]
     if port == PORT:
         s = _b32((ipn << 8) | (nonce & 0xFF), 8)
     else:
         s = _b32((ipn << 28) | ((port & 0xFFFF) << 12) | (nonce & 0xFFF), 12)
-    return "SHINE-" + "-".join(s[i:i + 4] for i in range(0, len(s), 4))
+    return "KAGE-" + "-".join(s[i:i + 4] for i in range(0, len(s), 4))
 
 
 def norm_code(code):
     s = str(code or "").upper().replace("O", "0").replace("I", "1").replace("L", "1")
     s = re.sub(r"[^0-9A-Z]", "", s)
-    if s.startswith("SH1NE"): s = s[5:]
+    if s.startswith("KAGE"): s = s[4:]
+    elif s.startswith("SH1NE"): s = s[5:]
     elif s.startswith("SHINE"): s = s[5:]
     return s
 
@@ -53,14 +54,14 @@ def parse_code(code):
     else: ipn, port = n >> 28, (n >> 12) & 0xFFFF
     if port == 0: return None
     ip = socket.inet_ntoa(struct.pack("!I", ipn))
-    return ip, port, "SHINE-" + "-".join(s[i:i + 4] for i in range(0, len(s), 4))
+    return ip, port, "KAGE-" + "-".join(s[i:i + 4] for i in range(0, len(s), 4))
 
 
 def session_key(code, password=""):
-    return hashlib.sha256(("SHINE|%s|%s" % (norm_code(code), password or "")).encode()).digest()
+    return hashlib.sha256(("KAGE|%s|%s" % (norm_code(code), password or "")).encode()).digest()
 
 
-LAN_KEY = hashlib.sha256(b"SHINE-LAN").digest()
+LAN_KEY = hashlib.sha256(b"KAGE-LAN").digest()
 
 
 def seal(key, msg):
@@ -286,7 +287,7 @@ class Session:
     def join(self, code, addr=None):
         """addr: a LAN address found by LAN discovery (same code/key, but no trip through the router)"""
         p = parse_code(code)
-        if not p: self.state = "error"; self.status = "THAT CODE LOOKS WRONG (SHINE-XXXX-XXXX)"; return False
+        if not p: self.state = "error"; self.status = "THAT CODE LOOKS WRONG (KAGE-XXXX-XXXX)"; return False
         ip, port, self.code = p
         self.host_addr = tuple(addr) if addr else (ip, port); self.key = session_key(self.code, self.password); self.key0 = session_key(self.code, "")
         self.state = "joining"; self.status = "CALLING HOST..."; self.join_started = time.time()

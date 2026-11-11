@@ -3,7 +3,9 @@ Play as Elijer, a masked hacker, in the night city of Kagehara.
 \u00a92026 EX ROMANIA/EX INC.
 """
 import math, random, time
-from panda3d.core import NodePath, TextNode, CardMaker, TransparencyAttrib, Vec3
+from panda3d.core import (NodePath, TextNode, CardMaker, TransparencyAttrib, Vec3,
+                          LineSegs, ColorBlendAttrib, TextureStage, Filename, ClockObject,
+                          Texture, PNMImage, SamplerState)
 from direct.gui.DirectGui import DirectFrame, DirectButton, DGG
 import fs_ui as U
 import fs_data as D
@@ -101,6 +103,22 @@ class Hackeria:
         self._prompt = ""
         self._hud = None
         self._cool = {}
+        self._hold = 0.0
+        self._holding = False
+        self._hold_target = None
+        self._chain_t = 0.0
+        self._chain_n = 0
+        self._glitch_t = 0.0
+        self._aiming = False
+        self._line_np = None
+        self._ring_np = None
+        self._tint_np = None
+        self._scan_np = None
+        self._grain_np = None
+        self._cctv_np = None
+        self._cctv_t = None
+        self._drone_on = False
+        self._saved_scale = None
         self._build_world()
         self._hud_init()
 
@@ -237,6 +255,10 @@ class Hackeria:
     # ---------------- update
     def update(self, dt):
         g = self.g
+        if self._chain_t > 0:
+            self._chain_t = max(0.0, self._chain_t - dt)
+            if self._chain_t <= 0:
+                self._chain_n = 0
         if self.blackout_t > 0:
             self.blackout_t = max(0.0, self.blackout_t - dt)
             if self.blackout_t <= 0:
@@ -250,6 +272,8 @@ class Hackeria:
         self._pick_target()
         self._update_profiler()
         self._update_highlight()
+        self._update_hold(dt)
+        self._update_aim_fx(dt)
         self._update_cam(dt)
         if self.ui is not None:
             self._pulse_ui()
@@ -273,7 +297,7 @@ class Hackeria:
         self._prompt = ""
         if self.g.overlay or self.g.home or self.g.garage or self.cam_view:
             if self.cam_view:
-                self._prompt = "[E] HACK FROM CAMERA    [N] NEXT CAM    [Esc] EXIT FEED"
+                self._prompt = "[HOLD E] HACK FROM CAMERA    [N] NEXT CAM    [Esc] EXIT FEED"
             return
         px, py = self._player_xy()
         fx, fy = self._facing()
@@ -310,7 +334,7 @@ class Hackeria:
         if locked:
             self._prompt = "[LOCKED] %s  -  unlock in %s (Q)" % (p["label"], OS_NAME)
         else:
-            self._prompt = "[E] HACK  -  %s" % p["label"]
+            self._prompt = "[HOLD E] HACK  -  %s" % p["label"]
 
     def _update_highlight(self):
         # flat cyan tint on the selected prop, no bloom
@@ -427,16 +451,39 @@ class Hackeria:
 
     def _update_cam(self, dt):
         if not self.cam_view:
+            self._cctv_hide()
             return
         p = self.cam_view
         cam = self.g.app.camera
         cam.set_pos(p["x"], p["y"], p.get("z", 7.2))
-        # look toward city centre-ish / player
-        px, py = self._player_xy()
-        cam.look_at(px, py, 1.2)
+        # look toward the street / city centre so the feed is not a wall close-up
+        vx, vy = -p["x"], -p["y"]
+        ln = math.hypot(vx, vy) or 1.0
+        cam.look_at(p["x"] + vx / ln * 22.0, p["y"] + vy / ln * 22.0, 1.5)
         self.g.app.camLens.set_fov(58)
+        self._cctv_show(dt)
 
     # ---------------- actions
+    def has_hack_target(self):
+        if self.g.overlay or self.g.home or self.g.garage:
+            return False
+        p = self.target
+        if p is None:
+            return False
+        if p.get("skill") and p["skill"] not in self.skills and p["kind"] != "site":
+            return False
+        return True
+
+    def e_held(self):
+        if self.g.vb.get("v_hack"):
+            return True
+        try:
+            from panda3d.core import KeyboardButton
+            mw = self.g.app.mouseWatcherNode
+            return mw.is_button_down(KeyboardButton.ascii_key("e"))
+        except Exception:
+            return False
+
     def try_hack(self):
         if self.cam_view and (self.target is None):
             # hack whatever the camera is aimed at is already picked; if none, just stay
@@ -469,6 +516,7 @@ class Hackeria:
         }.get(kind)
         if fn:
             fn(p)
+            self._on_hacked(p)
         return True
 
     def _heat(self, n, why):
@@ -625,20 +673,24 @@ class Hackeria:
             return
         self.blackout_t = 16.0
         self._cool["blackout"] = self.g.time + 90.0
-        # darker night, no bloom — just a deeper fog and dimmer lights
         try:
-            self.g.app.set_daylight(0.0)
-            self.g.app.fogden = 0.008
+            self.g._apply_blackout_light()
         except Exception:
-            pass
+            try:
+                self.g.app.set_daylight(0.0)
+                self.g.app.fogden = 0.04
+            except Exception:
+                pass
         for c in self.g.police:
             if getattr(c, "ai", None):
                 c.ai.seen = False
         self.g.escape_t = max(self.g.escape_t, 4.0)
         self.g.toast("%s: CITY BLACKOUT" % OS_NAME, 2.6)
         self._count("blackout", 1)
+        self._glitch_t = 0.45
         try:
-            self.g.app.sfx("heat", 0.4)
+            self.g.app.sfx("hack_static", 0.7)
+            self.g.app.sfx("heat", 0.35)
         except Exception:
             pass
 
@@ -727,7 +779,7 @@ class Hackeria:
             x = -0.55 + col * 1.1
             y = 0.48 - row * 0.18
             have = sid in self.skills
-            lab = ("%s  ✓" % title) if have else title
+            lab = ("%s  [ON]" % title) if have else title
             fg = (0.4, 1, 0.7, 1) if have else (0.8, 0.95, 1, 1)
             U.text(o, lab, (x, y), 0.032, fg=fg, font=U.FONT_PLAIN)
             U.text(o, blurb, (x, y - 0.045), 0.024, fg=(0.75, 0.8, 0.85, 1), font=U.FONT_PLAIN)
@@ -756,7 +808,7 @@ class Hackeria:
         if self.g.phone:
             self.g.toggle_phone()
         o = self._panel("PHONE LINK")
-        U.text(o, "Elijer's street OS. Highlight a device and press E to HACK.",
+        U.text(o, "Elijer's street OS. Highlight a device and hold E to HACK.",
                (0, 0.58), 0.03, fg=(0.85, 0.9, 0.95, 1), font=U.FONT_PLAIN)
         U.button(o, "SKILL TREE", (0, 0.35), self.open_skills, w=0.32, h=0.055, scale=0.04, edge=(0.3, 0.9, 1, 1))
         U.button(o, "NIGHT CONTRACTS", (0, 0.18), self.open_contracts, w=0.32, h=0.055, scale=0.04, edge=(0.95, 0.75, 0.2, 1))
@@ -776,8 +828,312 @@ class Hackeria:
     def _pulse_ui(self):
         pass
 
+    def _hold_time(self):
+        base = 0.80
+        if self._chain_t > 0:
+            return max(0.32, base * (0.50 ** min(3, self._chain_n)))
+        return base
+
+    def _update_hold(self, dt):
+        # wall-clock hold so slow-mo does not stretch the ring
+        want = self.has_hack_target() and self.e_held() and not self.g.blocked() and self.g.overlay is None
+        if self.cam_view:
+            want = self.e_held() and self.has_hack_target() and self.g.overlay is None
+        if want:
+            if not self._holding:
+                self._holding = True
+                self._hold = 0.0
+                self._hold_target = self.target
+                self._drone(True)
+            # if the target changed, restart unless chaining the next nearby device
+            if self.target is not None and self._hold_target is not None and self.target is not self._hold_target:
+                self._hold_target = self.target
+                self._hold = min(self._hold, self._hold_time() * 0.35)
+            self._hold += max(0.0, dt if self.g.time_scale <= 0 else dt / max(0.2, self.g.time_scale))
+            # use unscaled wall dt: step() already scaled dt; invert that
+            need = self._hold_time()
+            frac = min(1.0, self._hold / need)
+            if self.target:
+                lab = self.target.get("label", "device")
+                extra = "  CHAIN x%d" % self._chain_n if self._chain_n else ""
+                self._prompt = "HACKING  %s  %d%%%s" % (lab, int(frac * 100), extra)
+            if self._hold >= need:
+                self._holding = False
+                self._hold = 0.0
+                self._drone(False)
+                self.try_hack()
+        else:
+            if self._holding:
+                self._holding = False
+                self._hold = 0.0
+                self._drone(False)
+
+    def _on_hacked(self, p):
+        self._glitch_t = 0.28
+        self._chain_n = (self._chain_n + 1) if self._chain_t > 0 else 1
+        self._chain_t = 2.6
+        try:
+            self.g.app.sfx("hack_chirp", min(1.0, 0.45 + 0.1 * self._chain_n))
+            self.g.app.sfx("hack_static", 0.55)
+        except Exception:
+            pass
+        if self._chain_n >= 2:
+            try:
+                self.g.toast("%s  CHAIN x%d" % (OS_NAME, self._chain_n), 1.4)
+            except Exception:
+                pass
+
+    def _drone(self, on):
+        L = getattr(self.g.app, "loops", {})
+        s = L.get("hack_drone")
+        if not s:
+            return
+        try:
+            if on:
+                s.set_volume(0.28 * self.g.app.vol("sfx_volume"))
+                from panda3d.core import AudioSound
+                if s.status() != AudioSound.PLAYING:
+                    s.play()
+                self._drone_on = True
+            else:
+                s.set_volume(0)
+                self._drone_on = False
+        except Exception:
+            pass
+
+    def _tex(self, name):
+        path = Filename.from_os_specific(
+            __import__("os").path.join(self.g.app.BASE, "assets", "tex", name)
+        ).get_fullpath()
+        try:
+            return self.g.app.loader.load_texture(path)
+        except Exception:
+            return None
+
+    def _ensure_fx(self):
+        a = self.g.app
+        if self._tint_np is None:
+            cm = CardMaker("hack-tint"); cm.set_frame(-1, 1, -1, 1)
+            n = a.render2d.attach_new_node(cm.generate())
+            n.set_transparency(TransparencyAttrib.M_alpha)
+            n.set_color(0.04, 0.10, 0.13, 0.0)
+            n.set_bin("fixed", 40)
+            n.set_depth_test(False); n.set_depth_write(False)
+            self._tint_np = n
+        if self._scan_np is None:
+            cm = CardMaker("hack-scan"); cm.set_frame(-1, 1, -1, 1)
+            n = a.render2d.attach_new_node(cm.generate())
+            n.set_transparency(TransparencyAttrib.M_alpha)
+            tex = self._tex("hack_scan.png")
+            if tex:
+                tex.set_wrap_u(SamplerState.WM_repeat); tex.set_wrap_v(SamplerState.WM_repeat)
+                n.set_texture(tex)
+                n.set_tex_scale(TextureStage.get_default(), 1, 90)
+            n.set_color(0.55, 0.95, 1.0, 0.0)
+            n.set_bin("fixed", 42)
+            n.set_depth_test(False); n.set_depth_write(False)
+            n.set_light_off(); n.set_shader_off()
+            self._scan_np = n
+        if self._grain_np is None:
+            cm = CardMaker("hack-grain"); cm.set_frame(-1, 1, -1, 1)
+            n = a.render2d.attach_new_node(cm.generate())
+            n.set_transparency(TransparencyAttrib.M_alpha)
+            tex = self._tex("hack_grain.png")
+            if tex:
+                tex.set_wrap_u(SamplerState.WM_repeat); tex.set_wrap_v(SamplerState.WM_repeat)
+                n.set_texture(tex)
+                n.set_tex_scale(TextureStage.get_default(), 3.2, 2.4)
+            n.set_color(1, 1, 1, 0.0)
+            n.set_bin("fixed", 43)
+            n.set_depth_test(False); n.set_depth_write(False)
+            n.set_light_off(); n.set_shader_off()
+            self._grain_np = n
+
+    def _update_aim_fx(self, dt):
+        self._ensure_fx()
+        aiming = self.target is not None and not self.g.overlay and (self.g.phone is None or self.cam_view)
+        if self.cam_view:
+            aiming = True
+        holding = self._holding
+        self._aiming = aiming or holding or self._glitch_t > 0
+        # slight slow-mo while the phone is locked on a target / holding
+        if getattr(self.g, "_ds", None) is None:
+            if holding:
+                self.g.time_scale = 0.55
+            elif aiming and self.target is not None and not self.cam_view:
+                self.g.time_scale = 0.82
+            else:
+                if self.g.time_scale in (0.55, 0.82):
+                    self.g.time_scale = 1.0
+        # tint: cold teal/black, no bloom
+        ta = 0.0
+        if aiming:
+            ta = 0.38 if holding else 0.20
+        if self.blackout_t > 0:
+            ta = max(ta, 0.45)
+        if self._glitch_t > 0:
+            ta = max(ta, 0.40)
+        if self._tint_np:
+            self._tint_np.set_color(0.03, 0.10, 0.13, ta)
+        # scanlines / grain during hold, glitch punch, or CCTV
+        sa = 0.0
+        ga = 0.0
+        if holding:
+            sa, ga = 0.16, 0.10
+        if self.cam_view:
+            sa, ga = 0.28, 0.18
+        if self._glitch_t > 0:
+            self._glitch_t = max(0.0, self._glitch_t - dt)
+            flick = 0.15 + 0.55 * abs(__import__("math").sin(self.g.time * 70))
+            sa = max(sa, 0.45 * flick)
+            ga = max(ga, 0.40 * flick)
+            if self._scan_np:
+                self._scan_np.set_x(0.01 * __import__("math").sin(self.g.time * 90))
+        else:
+            if self._scan_np:
+                self._scan_np.set_x(0)
+        if self._scan_np:
+            self._scan_np.set_color(0.55, 0.95, 1.0, sa)
+            if sa <= 0.01:
+                self._scan_np.hide()
+            else:
+                self._scan_np.show()
+        if self._grain_np:
+            # slowly drift the grain
+            try:
+                self._grain_np.set_tex_offset(TextureStage.get_default(), (self.g.time * 0.15) % 1.0, (self.g.time * 0.09) % 1.0)
+            except Exception:
+                pass
+            self._grain_np.set_color(1, 1, 1, ga)
+            if ga <= 0.01:
+                self._grain_np.hide()
+            else:
+                self._grain_np.show()
+        self._update_line()
+        self._update_ring()
+
+    def _update_line(self):
+        if self._line_np is not None and not self._line_np.is_empty():
+            self._line_np.remove_node()
+        self._line_np = None
+        if not self.target or self.g.overlay or self.cam_view:
+            return
+        p = self.target
+        px, py = self._player_xy()
+        z0 = 1.15
+        z1 = p.get("z", 1.0)
+        ls = LineSegs()
+        ls.set_thickness(1.6)
+        a = 0.55 + 0.25 * (1 if self._holding else 0)
+        ls.set_color(0.30, 0.95, 1.0, a)
+        ls.move_to(px, py, z0)
+        ls.draw_to(p["x"], p["y"], z1)
+        n = self.g.app.render.attach_new_node(ls.create())
+        n.set_transparency(TransparencyAttrib.M_alpha)
+        n.set_light_off(); n.set_shader_off()
+        n.set_depth_write(False)
+        n.set_bin("fixed", 25)
+        self._line_np = n
+
+    def _update_ring(self):
+        if self._ring_np is not None and not self._ring_np.is_empty():
+            self._ring_np.remove_node()
+        self._ring_np = None
+        if not self._holding:
+            return
+        need = self._hold_time()
+        frac = min(1.0, self._hold / max(0.001, need))
+        import math
+        root = self.g.app.aspect2d.attach_new_node("hack-ring")
+        def ring(r, thick, col, f=1.0, segs=64):
+            ls = LineSegs(); ls.set_thickness(thick); ls.set_color(*col)
+            nseg = max(2, int(segs * f))
+            for i in range(nseg + 1):
+                ang = -math.pi * 0.5 + (2 * math.pi) * (i / segs)
+                x, y = math.cos(ang) * r, math.sin(ang) * r
+                if i == 0:
+                    ls.move_to(x, 0, y)
+                else:
+                    ls.draw_to(x, 0, y)
+            np_ = root.attach_new_node(ls.create())
+            np_.set_transparency(TransparencyAttrib.M_alpha)
+            np_.set_light_off(); np_.set_shader_off()
+            np_.set_bin("fixed", 60)
+        ring(0.13, 1.4, (0.15, 0.35, 0.40, 0.55), 1.0)
+        ring(0.13, 2.4, (0.35, 0.95, 1.0, 0.95), frac)
+        U.text(root, "%d" % int(frac * 100), (0, -0.01), 0.045, fg=(0.7, 1, 1, 0.95), font=U.FONT_PLAIN)
+        if self._chain_n:
+            U.text(root, "CHAIN x%d" % self._chain_n, (0, -0.20), 0.032, fg=(0.95, 0.85, 0.3, 1), font=U.FONT_PLAIN)
+        U.text(root, OS_NAME, (0, 0.20), 0.028, fg=(0.45, 0.95, 1, 0.9), font=U.FONT_PLAIN)
+        root.set_pos(0, 0, -0.05)
+        self._ring_np = root
+
+    def _cctv_show(self, dt):
+        a = self.g.app
+        if self._cctv_np is None:
+            root = a.aspect2d.attach_new_node("cctv")
+            # letterbox bars
+            ar = max(a.getAspectRatio(), 1.0)
+            DirectFrame(parent=root, frameColor=(0, 0, 0, 0.82), frameSize=(-ar - 1, ar + 1, 0.86, 1.2))
+            DirectFrame(parent=root, frameColor=(0, 0, 0, 0.82), frameSize=(-ar - 1, ar + 1, -1.2, -0.86))
+            self._cctv_os = U.text(a.a2dTopLeft, OS_NAME, (0.06, -0.10), 0.032, fg=(0.45, 0.95, 1, 1),
+                                   align=TextNode.A_left, font=U.FONT_PLAIN)
+            self._cctv_rec = U.text(a.a2dTopRight, "REC", (-0.08, -0.10), 0.032, fg=(1, 0.25, 0.25, 1),
+                                    align=TextNode.A_right, font=U.FONT_PLAIN)
+            self._cctv_t = U.text(a.a2dBottomLeft, "", (0.06, 0.10), 0.030, fg=(0.7, 1, 0.85, 1),
+                                  align=TextNode.A_left, font=U.FONT_PLAIN)
+            self._cctv_np = root
+        # timestamp + cam id
+        p = self.cam_view or {}
+        try:
+            cams = self.cam_list or [q for q in self.props if q["kind"] == "camera"]
+            idx = cams.index(self.cam_view) + 1 if self.cam_view in cams else 1
+            total = len(cams) or 1
+        except Exception:
+            idx, total = 1, 1
+        import time as _t
+        ts = _t.strftime("%Y-%m-%d  %H:%M:%S", _t.localtime())
+        if self._cctv_t:
+            self._cctv_t.setText("CAM-%02d / %02d   KAGEHARA   %s" % (idx, total, ts))
+        if self._cctv_rec:
+            on = int(self.g.time * 2) % 2 == 0
+            self._cctv_rec.setText("REC" if on else "REC  *")
+
+    def _cctv_hide(self):
+        if self._cctv_np is None:
+            return
+        try:
+            self._cctv_np.remove_node()
+        except Exception:
+            pass
+        self._cctv_np = None
+        for n in (getattr(self, "_cctv_os", None), getattr(self, "_cctv_rec", None), getattr(self, "_cctv_t", None)):
+            if n is None:
+                continue
+            try:
+                n.destroy()
+            except Exception:
+                pass
+        self._cctv_os = self._cctv_rec = self._cctv_t = None
+
+    def _clear_fx(self):
+        self._drone(False)
+        if getattr(self.g, "_ds", None) is None:
+            self.g.time_scale = 1.0
+        for attr in ("_line_np", "_ring_np", "_tint_np", "_scan_np", "_grain_np"):
+            n = getattr(self, attr, None)
+            if n is not None:
+                try:
+                    if not n.is_empty():
+                        n.remove_node()
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+        self._cctv_hide()
+
     def destroy(self):
         self.close_ui()
+        self._clear_fx()
         try:
             self.root.remove_node()
         except Exception:
